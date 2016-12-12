@@ -246,21 +246,23 @@ printRes :: (Show a) => Either String [a] -> String
 printRes (Left err) = "ERROR: " ++ err
 printRes (Right ls) = show ls
 
-randomIntList :: StdGen -> [Int]
-randomIntList = randomRs (-1000,1000)
+randomIntList :: (RandomGen s) => s -> [Int]
+randomIntList = randomRs (-1000, 1000)
 
-randomRealList :: StdGen -> [Double]
+randomRealList :: (RandomGen s) => s -> [Double]
 randomRealList = randomRs (-1000.0,1000.0)
 
-runTests :: (Num a, Ord a) => Command a -> Int -> Int -> StdGen -> [Either String [a]]
-runTests _ _ 0 _ = []
-runTests com nex mode gen = case mode of
-    0 -> [interpretProgram (randomIntList gen) com] ++ runTests com (nex-1) mode gen
-    1 -> [interpretProgram (randomRealList gen) com] ++ runTests com (nex-1) mode gen
+runTests :: Command Int -> Int -> Int -> [Int] -> [Either String [Int]]
+runTests _ 0 _ _ = []
+runTests com nex mode list = interpretProgram list com : runTests com (nex-1) mode (drop (head list) list)
+
+runTestsReal :: Command Double -> Int -> Int -> [Double] -> [Either String [Double]]
+runTestsReal _ 0 _ _ = []
+runTestsReal com nex mode list = interpretProgram list com : runTestsReal com (nex-1) mode (drop (truncate $ head list) list)
 
 printTests :: (Num a, Ord a, Show a) => Int -> [Either String [a]] -> String
 printTests _ [] = ""
-printTests n (x:xs) = "Resultat "++show (n-(length xs))++": "++printRes x++"\n"++printTests n xs
+printTests n (x:xs) = "Resultat "++show (n-length xs)++": "++printRes x++"\n"++printTests n xs
 
 
 
@@ -268,7 +270,7 @@ printTests n (x:xs) = "Resultat "++show (n-(length xs))++": "++printRes x++"\n"+
 
 main :: IO ()
 main = do
-    seed <- newStdGen
+    ranSeed <- newStdGen
     fitxer <- openFile "programhs.txt" ReadMode
     programa <- hGetLine fitxer
     let prog :: (Read a, Num a) => Command a
@@ -286,22 +288,25 @@ main = do
             inp <- getLine
             putStr "Resultat: "
             case intreal of
-                "0" -> putStrLn $ printRes (interpretProgram (read inp++randomIntList seed) prog)
-                "1" -> putStrLn $ printRes (interpretProgram (read inp++randomRealList seed) prog)
+                "0" -> putStrLn $ printRes (interpretProgram (read inp++randomIntList ranSeed) prog)
+                "1" -> putStrLn $ printRes (interpretProgram (read inp++randomRealList ranSeed) prog)
         "1" -> do
             putStr "Resultat: "
             case intreal of
-                "0" -> putStrLn $ printRes (interpretProgram (randomIntList seed) prog)
-                "1" -> putStrLn $ printRes (interpretProgram (randomRealList seed) prog)
+                "0" -> putStrLn $ printRes (interpretProgram (randomIntList ranSeed) prog)
+                "1" -> putStrLn $ printRes (interpretProgram (randomRealList ranSeed) prog)
         "2" -> do
             putStrLn "Nombre de tests:"
             tests <- getLine
-            let tests = read tests
-            putStr printTests tests $ runTests prog tests (read intreal) seed
-    putStr "Programa indentat:\n"
-    print prog
-    putStr "Resultat de l'execucio:\n"
-    putStr $ printRes (interpretProgram (randomIntList seed) prog)
+            let testsRes :: String
+                testsRes = case intreal of
+                    "0" -> printTests (read tests) (runTests prog (read tests) (read intreal)  (randomIntList ranSeed))
+                    "1" -> printTests (read tests) (runTestsReal prog (read tests) (read intreal) (randomRealList ranSeed))
+            putStr testsRes
+    -- putStr "Programa indentat:\n"
+    -- print prog
+    -- putStr "Resultat de l'execucio:\n"
+    -- putStr $ printRes (interpretProgram (randomIntList ranSeed) prog)
     hClose fitxer
     return ()
 
